@@ -22,13 +22,12 @@ def getAngle(ptA,ptB):
 	else:
 		tg=(ptA[1]-ptB[1])/(ptA[0]-ptB[0])
 		return np.arctan(tg)*180.0/np.pi+90
-def calcSiftDes(img,points):
+def calcSiftDes(img,points,auto_orientation=False,angle=0):
 	# img=cv2.imread(imgName,cv2.IMREAD_COLOR)
 	
 	(height,width,channel)=img.shape
 	gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 	cnt=len(points)
-	print cnt
 	kp=[]
 	for i in range(cnt/2):
 		points[2*i]=0.5*width+points[2*i]
@@ -36,47 +35,37 @@ def calcSiftDes(img,points):
 
 		kp.append(cv2.KeyPoint(points[2*i],points[2*i+1],4))
 	for i in range(cnt/2):
-		if i==0:
-			ptA=kp[cnt/2-1].pt
-			ptB=kp[1].pt
-		elif i==cnt/2-1:
-			ptA=kp[cnt/2-2].pt
-			ptB=kp[0].pt
+
+		if auto_orientation is True:
+			if i==0:
+				ptA=kp[cnt/2-1].pt
+				ptB=kp[1].pt
+			elif i==cnt/2-1:
+				ptA=kp[cnt/2-2].pt
+				ptB=kp[0].pt
+			else:
+				ptA=kp[i-1].pt
+				ptB=kp[i+1].pt
+			temp=getAngle(ptA,ptB)
+			kp[i].angle=temp
 		else:
-			ptA=kp[i-1].pt
-			ptB=kp[i+1].pt
-		temp=getAngle(ptA,ptB)
-		kp[i].angle=temp
-
-		# print kp[i].angle
-	# print kp
-	# keypoints = sift.detect(gray,None)
-	# print kp
-	# kp=[cv2.KeyPoint(343.0,346.5,2),cv2.KeyPoint(249.0,335.0,6)]
-	# print kp
+			kp[i].angle=angle
 	sift=cv2.SIFT()
-
 	kp,des=sift.compute(gray,kp)
-	# sz=des.size
-	# des.reshape(sz)
-	# des.shape=(1,sz)
-	# print des.shape
-	# img=cv2.drawKeypoints(img,kp)
-	# cv2.imshow(imgName,img)
-	# cv2.waitKey(0)
+
 	return des,kp
 
-def test(imgName,points):
-	img=cv2.imread(imgName)
-	(height,width,channel)=img.shape
-	cnt=len(points)
-	for i in range(cnt/2):
-		x=0.5*width+points[2*i]
-		y=0.5*height-points[2*i+1]
-		cv2.circle(img,(int(x),int(y)),2,(255,0,0,255))
-	cv2.imshow(imgName,img)
-	cv2.waitKey(0)
-	return
+# def test(imgName,points):
+# 	img=cv2.imread(imgName)
+# 	(height,width,channel)=img.shape
+# 	cnt=len(points)
+# 	for i in range(cnt/2):
+# 		x=0.5*width+points[2*i]
+# 		y=0.5*height-points[2*i+1]
+# 		cv2.circle(img,(int(x),int(y)),2,(255,0,0,255))
+# 	cv2.imshow(imgName,img)
+# 	cv2.waitKey(0)
+# 	return
 
 if __name__=="__main__":
 	argvs=sys.argv
@@ -100,22 +89,63 @@ if __name__=="__main__":
 		cnt=0
 		for root,dirs,fn in os.walk(SAVEPATH):
 			cnt=len(fn)
-			print cnt-3,"images found."
-			print "model: ",fn[cnt-2],fn[cnt-1]
 		absolutePath=os.getcwd()+"\\"+root+"\\"
-		FILE=absolutePath+fn[cnt-2]
+		# FILE=absolutePath+fn[cnt-2]
+		FILE=absolutePath+"muct-"+camera+"-landmarks_original.model"
 		pcaMatrix,meanShape,alignedSet=getDataFromModel(FILE)
 		# print pcaMatrix
 		# print meanShape
 		# print len(alignedSet)
-		DESNAME=absolutePath+"muct-"+camera+".profile"
+		DESNAME=absolutePath+"muct-"+camera+"_2.profile"
 		fout=open(DESNAME,"w")
-		fout.writelines("LocalProfile caclulated with SIFT descriptor.")
-		fout.writelines("Points per Image: "+str(meanShape.size/2)+str("\n"))
-		for i in range(cnt-3):
+		fout.writelines("LocalProfile caclulated with SIFT descriptor.\n")
+		profileVec=[]
+
+		for i in range(751):
 			imgName=absolutePath+fn[i]
 			img=cv2.imread(imgName,cv2.IMREAD_COLOR)
-			print imgName," Loaded"
-			des=calcSiftDes(img,alignedSet[i])
-			fout.writelines(str(i)+":"+str(des.tolist()))
-			fout.writelines("\n")
+			# print imgName," Loaded"
+			des,kp=calcSiftDes(img,alignedSet[i],auto_orientation=False,angle=0)
+			profileVec.append(des)
+		mean=sum(profileVec)/751.0
+		(mP,nP)=mean.shape
+
+		profileTransVec=[[] for x in range(mP)]
+		covVec=[]
+		for i in range(751):
+			for j in range(mP):
+				profileTransVec[j].extend(profileVec[i][j].tolist())
+
+		for j in range(mP):
+			data=np.array(profileTransVec[j])
+			data.reshape(751*nP)
+			data.shape=(751,nP)
+			covVec.append(np.cov(data.transpose()))
+		print len(covVec)
+		print covVec[0].shape
+
+		# convVec=[ele-mean for ele in profileVec]
+		# sumVec=[np.array([0.0 for i in range(nP*nP)]) for j in range(mP)]
+		# for j in range(mP):
+		# 	sumVec[j].reshape(nP*nP)
+		# 	sumVec[j].shape=(nP,nP)
+		# for i in range(751):
+		# 	for j in range(mP):
+		# 		conv=np.dot(convVec[i][j].transpose(),convVec[i][j])
+		# 		sumVec[j]+=conv
+		#write mean profile
+
+		mean.reshape(mP,nP)
+		mean.shape=(1,mP*nP)
+		fout.writelines("ParametersOfProfile(mP,nP)"+":"+str(mP)+" "+str(nP)+"\n")
+		fout.writelines("MeanProfile"+":"+str(mean[0].tolist())+"\n")
+		for j in range(mP):
+			# sumVec[j]/=751.0
+
+			covVec[j].shape=(1,nP*nP)
+			fout.writelines("LandMark "+str(j)+":"+str(covVec[j][0].tolist())+"\n")
+
+
+
+			# fout.writelines(str(i)+":"+str(des.tolist()))
+			# fout.writelines("\n")

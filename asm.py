@@ -21,6 +21,7 @@ PATH_E="muct-landmarks-v1\muct-e-jpg-v1\jpg"
 CASCADE_LEFT_EYE="haarcascade_mcs_lefteye.xml"
 CASCADE_RIGHT_EYE="haarcascade_mcs_righteye.xml"
 CASCADE_FACE_EYE="haarcascade_frontalface_alt.xml"
+INFINITE=1000000
 def loadKeyPoint(FILENAME):
 	fin=open(FILENAME,"r")
 	cnt=0
@@ -88,6 +89,7 @@ def getDataFromProfile(profileName):
 	fin=open(profileName,"r")
 	M=int(fin.readline().strip().split(":")[1])
 	average_profile=np.array([0.0 for i in range(M*128)])
+	profileVec=[]
 	cnt=0
 	for line in fin.readlines():
 		temp=line.strip().split(":")[1]
@@ -98,17 +100,42 @@ def getDataFromProfile(profileName):
 			data.extend(data_temp[i][1:].split(", "))
 		profile=np.array(np.vectorize(float)(data))
 		average_profile+=profile
+		profileVec.append(profile)
 		cnt+=1
+
 	average_profile/=cnt
 	average_profile.reshape(M*128)
 	average_profile.shape=(M,128)
 	# print average_profile
 	return average_profile
-def drawShape(img,modelShape):
+def getDataFromProfile_2(profileName):
+	fin=open(profileName,"r")
+	fin.readline()
+	MN=fin.readline().strip().split(":")[1].strip().split(" ")
+	mP,nP=int(MN[0]),int(MN[1])
+	convVec=[]
+	for i in range(mP+1):
+		line=fin.readline().strip().split(":")[1]
+		l=len(line)
+		data=np.vectorize(float)(line[1:l-1].strip().split(","))
+		if i==0:
+			average_profile=np.array(data)
+			average_profile.reshape(mP*nP)
+			average_profile.shape=(mP,nP)
+		else:
+			conv=np.array(data)
+			conv.reshape(nP*nP)
+			conv.shape=(nP,nP)
+			convVec.append(conv)
+
+
+
+	return average_profile,convVec
+def drawShape(img,modelShape,color=(0,255,0,255)):
 	(M,N)=modelShape.shape
 	(height,width,channel)=img.shape
 	for i in range(N/2):
-		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,(0,255,0,255))
+		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,color)
 	return
 def init(img,face_cascade,left_eye_cascade,meanShape):
 	# drawShape(img,meanShape)
@@ -183,37 +210,72 @@ def init(img,face_cascade,left_eye_cascade,meanShape):
 	# cv2.waitKey(0)
 
 	return meanShape
+#return a and b
+def search(img,kp,wd,profile,sg):
+	inv_sg=np.linalg.inv(sg)
+	(mP,nP)=profile.shape
+	minDst=INFINITE
+	pos=(0,0)
+	for i in range(int(kp[0])-wd,int(kp[0])+wd+1):
+		for j in range(int(kp[1])-wd,int(kp[1])+wd+1):
+			search_kp=[i,j]
+			curProfile,search_kp=calcSiftDes(img,search_kp,auto_orientation=False,angle=0)
+			diff=curProfile-profile
 
-def updateMpdel():
-	return
+			distance=np.dot(np.dot(diff,inv_sg),diff.transpose())
+
+
+			if minDst>distance[0][0]:
+				minDst=distance[0][0]
+				pos=(i,j)
+
+
+
+
+	# print "\n"
+
+	return pos
+def updateModel(img,initShape,average_profile,sgVec,wd):
+	(mP,nP)=average_profile.shape
+	for i in range(mP):
+		kp=[initShape[0][2*i],initShape[0][2*i+1]]
+		profile=average_profile[i]
+		profile.reshape(nP)
+		profile.shape=(1,nP)
+		newPos=search(img,kp,wd,profile,sgVec[i])
+
+		initShape[0][2*i],initShape[0][2*i+1]=newPos[0],newPos[1]
+	return initShape
 if __name__=="__main__":
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
 	# test()
 	MODEL_FILE=PATH_B+"\muct-b-landmarks_aligned.model"
-	PROFILE_FILE=PATH_B+"\muct-b.profile"
+	PROFILE_FILE=PATH_B+"\muct-b_2.profile"
 	left_eye_cascade =cv2.CascadeClassifier(CASCADE_LEFT_EYE)
 	right_eye_cascade=cv2.CascadeClassifier(CASCADE_RIGHT_EYE)
 	face_cascade=cv2.CascadeClassifier(CASCADE_FACE_EYE)
-	#Mean average profile g
-	average_profile=getDataFromProfile(PROFILE_FILE)
-	#pca Matix g
-	#mean shape X^
+	average_profile,sgVec=getDataFromProfile_2(PROFILE_FILE)
 	pcaMatrix,meanShape,alignedSet=getDataFromModel(MODEL_FILE)
 
 	imgCnt=0
 	for root,dirs,fn in os.walk(PATH_B):
 		imgCnt=len(fn)-3
+	# t=5
+	t=np.random.randint(imgCnt)
 	t=0
-	# t=np.random.randint(imgCnt)
-
 	img=cv2.imread(PATH_B+"\\"+fn[t])
-	# img=cv.LoadImage("Face_3.jpg")
+	# img=cv2.imread("xicore.jpg")
+	img=cv2.imread("Face_3.jpg")
 	#initialized shape
 	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
-	# print initShape
-	des,kp=calcSiftDes(img,initShape.tolist()[0])
-	# print des
-	# print average_profile
-	cv2.imshow("TestASM",img)
+
+	# print initShape.shape
+	# drawShape(img,initShape,(255,0,0,255))
+	print initShape
+	initShape=updateModel(img,initShape,average_profile,sgVec,3)
+	print initShape
+	drawShape(img,initShape,(0,0,255,255))
+
+	cv2.imshow("test",img)
 	cv2.waitKey(0)
 
