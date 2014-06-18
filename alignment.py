@@ -149,11 +149,12 @@ def alignTwoShapes(original,target):
 	SB=np.array([S[7],S[9],S[10],S[8],S[2],S[3]])
 	SA.shape=(3,3)
 	SB.shape=(3,2)
+	print SA
+	print SB
 	transMatrix=np.dot(np.linalg.inv(SA),SB)
 	rotateMatrix=transMatrix[:2][:].transpose()
 	offsetMatix=transMatrix[2:3][:]
 	alignedRes=np.dot(rotateMatrix,original.transpose()).transpose()
-
 	for i in range(N):
 		alignedRes[i][0]+=offsetMatix[0][0]
 		alignedRes[i][1]+=offsetMatix[0][1]

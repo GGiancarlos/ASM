@@ -6,10 +6,13 @@
 #Calculate the local profile at the keypoint aligned.
 #Here we use sift-descriptor.
 import cv2
+import cv2.cv as cv
 import sys
 import os
 from align import *
 import numpy as np
+IPLIMAGE="<type 'cv2.cv.iplimage'>"
+NARRAY="<type 'numpy.ndarray'>"
 global INFINITE_GRADIENT
 INFINITE_GRADIENT=1000
 def getAngle(ptA,ptB):
@@ -19,11 +22,13 @@ def getAngle(ptA,ptB):
 	else:
 		tg=(ptA[1]-ptB[1])/(ptA[0]-ptB[0])
 		return np.arctan(tg)*180.0/np.pi+90
-def calcSiftDes(imgName,points):
-	img=cv2.imread(imgName,cv2.IMREAD_COLOR)
-	gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+def calcSiftDes(img,points):
+	# img=cv2.imread(imgName,cv2.IMREAD_COLOR)
+	
 	(height,width,channel)=img.shape
+	gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 	cnt=len(points)
+	print cnt
 	kp=[]
 	for i in range(cnt/2):
 		points[2*i]=0.5*width+points[2*i]
@@ -40,7 +45,9 @@ def calcSiftDes(imgName,points):
 		else:
 			ptA=kp[i-1].pt
 			ptB=kp[i+1].pt
-		kp[i].angle=getAngle(ptA,ptB)
+		temp=getAngle(ptA,ptB)
+		kp[i].angle=temp
+
 		# print kp[i].angle
 	# print kp
 	# keypoints = sift.detect(gray,None)
@@ -49,7 +56,7 @@ def calcSiftDes(imgName,points):
 	# print kp
 	sift=cv2.SIFT()
 
-	kps,des=sift.compute(gray,kp)
+	kp,des=sift.compute(gray,kp)
 	# sz=des.size
 	# des.reshape(sz)
 	# des.shape=(1,sz)
@@ -57,7 +64,7 @@ def calcSiftDes(imgName,points):
 	# img=cv2.drawKeypoints(img,kp)
 	# cv2.imshow(imgName,img)
 	# cv2.waitKey(0)
-	return des
+	return des,kp
 
 def test(imgName,points):
 	img=cv2.imread(imgName)
@@ -107,7 +114,8 @@ if __name__=="__main__":
 		fout.writelines("Points per Image: "+str(meanShape.size/2)+str("\n"))
 		for i in range(cnt-3):
 			imgName=absolutePath+fn[i]
+			img=cv2.imread(imgName,cv2.IMREAD_COLOR)
 			print imgName," Loaded"
-			des=calcSiftDes(imgName,alignedSet[i])
+			des=calcSiftDes(img,alignedSet[i])
 			fout.writelines(str(i)+":"+str(des.tolist()))
 			fout.writelines("\n")

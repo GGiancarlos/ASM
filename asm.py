@@ -6,11 +6,21 @@
 #test for ASM alg.
 import cv2
 import cv2.cv as cv
+from align import *
+import numpy as np
+from calcLocalProfile import *
+from alignment import *
+import os
+import string
+IPLIMAGE="<type 'cv2.cv.iplimage'>"
 PATH_A="muct-landmarks-v1\muct-a-jpg-v1\jpg"
 PATH_B="muct-landmarks-v1\muct-b-jpg-v1\jpg"
 PATH_C="muct-landmarks-v1\muct-c-jpg-v1\jpg"
 PATH_D="muct-landmarks-v1\muct-d-jpg-v1\jpg"
 PATH_E="muct-landmarks-v1\muct-e-jpg-v1\jpg"
+CASCADE_LEFT_EYE="haarcascade_mcs_lefteye.xml"
+CASCADE_RIGHT_EYE="haarcascade_mcs_righteye.xml"
+CASCADE_FACE_EYE="haarcascade_frontalface_alt.xml"
 def loadKeyPoint(FILENAME):
 	fin=open(FILENAME,"r")
 	cnt=0
@@ -50,6 +60,7 @@ def detect_and_draw(img, cascade):
                 cv.Rectangle(img, pt1, pt2, cv.RGB(255, 0, 0), 3, 8, 0)
 
     cv.ShowImage("result", img)
+
 def test():
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
 	CASCADE_FILE="haarcascade_frontalface_alt.xml"
@@ -73,6 +84,136 @@ def test():
 	cv2.imshow("test",img)
 	cv2.waitKey(0)
 	return
+def getDataFromProfile(profileName):
+	fin=open(profileName,"r")
+	M=int(fin.readline().strip().split(":")[1])
+	average_profile=np.array([0.0 for i in range(M*128)])
+	cnt=0
+	for line in fin.readlines():
+		temp=line.strip().split(":")[1]
+		L=len(temp)
+		data_temp=temp[1:L-2].split("], ")
+		data=[]
+		for i in range(len(data_temp)):
+			data.extend(data_temp[i][1:].split(", "))
+		profile=np.array(np.vectorize(float)(data))
+		average_profile+=profile
+		cnt+=1
+	average_profile/=cnt
+	average_profile.reshape(M*128)
+	average_profile.shape=(M,128)
+	# print average_profile
+	return average_profile
+def drawShape(img,modelShape):
+	(M,N)=modelShape.shape
+	(height,width,channel)=img.shape
+	for i in range(N/2):
+		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,(0,255,0,255))
+	return
+def init(img,face_cascade,left_eye_cascade,meanShape):
+	# drawShape(img,meanShape)
+	haar_scale=1.1
+	min_neighbors=2
+	(height,width,channel)=img.shape
+	haar_flags=cv.CV_HAAR_SCALE_IMAGE
+	min_facesize=(int(0.3*width),int(0.3*height))
+	min_eyesize=(int(0.2*min_facesize[0]),int(0.2*min_facesize[1]))
+	max_eyeSize=(int(0.25*min_facesize[0]),int(0.25*min_facesize[1]))
+	# (height,width,channel)=img.shape
+	gray=cv2.cvtColor(img,cv.CV_BGR2GRAY)
+	cv2.equalizeHist(gray, gray)
+
+	leftEye=left_eye_cascade.detectMultiScale(img,haar_scale, min_neighbors, haar_flags,min_eyesize)
+	faces=face_cascade.detectMultiScale(img,haar_scale, min_neighbors, haar_flags,min_facesize)
+	# facesEye= cv.HaarDetectObjects(gray, right_eye_cascade, cv.CreateMemStorage(0),haar_scale, min_neighbors, haar_flags, (20,20))
+	cmp=lambda eye1,eye2:1 if eye1[2]*eye1[3]>eye2[2]*eye2[3] else 0
+	EYE_FOUND=1
+	# if rightEye:
+	# 	for (rx, ry, rw, rh),rn in rightEye:
+	# 		image_scale=1
+	# 		pt1 = (int(rx * image_scale), int(ry * image_scale))
+	# 		pt2 = (int((rx + rw) * image_scale), int((ry + rh) * image_scale))
+			# cv.Rectangle(img, pt1, pt2, cv.RGB(0, 255, 0), 3, 8, 0)
+	if len(faces):
+		faces=faces.tolist()
+		faces.sort(cmp)
+		for (x, y, w, h) in faces[:1]:
+
+			image_scale=1
+			# the input to cv.HaarDetectObjects was resized, so scale the 
+			# bounding box of each face and convert it to two CvPoints
+			pt1 = (int(x * image_scale), int(y * image_scale))
+			pt2 = (int((x + w) * image_scale), int((y + h) * image_scale))
+			cv2.rectangle(img, pt1, pt2, cv.RGB(0, 0, 255), 3, 8, 0)
+
+			if len(leftEye):
+				leftEye=leftEye.tolist()
+				EyeVec=[]
+				leftEye.sort(cmp)
+				# print leftEye
+				for (lx, ly, lw, lh) in leftEye[:]:
+					# print (x, y, w, h),(lx, ly, lw, lh)
+					if (lx+0.5*lw)<x or (lx+0.5*lw)>x+w or (ly+0.5*lh)<y+0.3*h or (ly+0.5*lh)>y+0.5*h:
+						continue 
+					# print n
+					image_scale=1
+					# pt1 = (int(lx * image_scale), int(ly * image_scale))
+					# pt2 = (int((lx + lw) * image_scale), int((ly + lh) * image_scale))
+					# cv.Rectangle(img, pt1, pt2, cv.RGB(255, 0, 0), 3, 8, 0)
+					EyeVec.append((lx+0.5*lw-0.5*width,0.5*height-(ly+0.5*lh)))
+					if len(EyeVec)==2:
+						# print EyeVec[0]+EyeVec[1]
+						targetCenter=np.array([(EyeVec[0][0]+EyeVec[1][0])*0.5,(EyeVec[0][1]+EyeVec[1][1])*0.5])
+						sz=meanShape.size
+						meanShape.shape=(sz/2,2)
+						curCenter=np.array([meanShape.transpose()[0].sum()*2/sz,meanShape.transpose()[1].sum()*2/sz])
+						# print meanShape
+						for j in range(sz/2):
+							meanShape[j]-=(curCenter-targetCenter)
+						# print meanShape
+						meanShape.shape=(1,sz)
+
+
+
+					
+	drawShape(img,meanShape)
+					
+
+	
+	# cv2.waitKey(0)
+
+	return meanShape
+
+def updateMpdel():
+	return
 if __name__=="__main__":
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
-	test()
+	# test()
+	MODEL_FILE=PATH_B+"\muct-b-landmarks_aligned.model"
+	PROFILE_FILE=PATH_B+"\muct-b.profile"
+	left_eye_cascade =cv2.CascadeClassifier(CASCADE_LEFT_EYE)
+	right_eye_cascade=cv2.CascadeClassifier(CASCADE_RIGHT_EYE)
+	face_cascade=cv2.CascadeClassifier(CASCADE_FACE_EYE)
+	#Mean average profile g
+	average_profile=getDataFromProfile(PROFILE_FILE)
+	#pca Matix g
+	#mean shape X^
+	pcaMatrix,meanShape,alignedSet=getDataFromModel(MODEL_FILE)
+
+	imgCnt=0
+	for root,dirs,fn in os.walk(PATH_B):
+		imgCnt=len(fn)-3
+	t=0
+	# t=np.random.randint(imgCnt)
+
+	img=cv2.imread(PATH_B+"\\"+fn[t])
+	# img=cv.LoadImage("Face_3.jpg")
+	#initialized shape
+	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+	# print initShape
+	des,kp=calcSiftDes(img,initShape.tolist()[0])
+	# print des
+	# print average_profile
+	cv2.imshow("TestASM",img)
+	cv2.waitKey(0)
+
