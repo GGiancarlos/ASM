@@ -259,8 +259,9 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 		x=meanShape+np.dot(pcaMatrix,b).transpose()
 		y=alignTwoShapes(x,targetShape,True)
 
-		k=np.dot(y,meanShape.transpose())
-		y/=float(k)
+		k=1.0/np.dot(y,meanShape.transpose())
+
+		y*=k
 		pre_b=b
 		b=np.dot(pcaMatrix.transpose(),(y-meanShape).transpose())
 		diff=np.linalg.norm(pre_b-b,2)
@@ -268,17 +269,17 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 		if diff<0.01:
 			break
 
-	return y*k
-def match(img,shape,meanShape,average_profile,sgVec,wd):
+	return y/k
+def match(img,shape,meanShape,average_profile,sgVec,pcaMatrix,wd):
 
 	iterCnt=5
 	while iterCnt:
 		iterCnt-=1
-		newShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
+		targetShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
 
 		# drawShape(img,newShape,COLOR[iterCnt])
-
-		shape=updateModelParas(img,meanShape,newShape,pcaMatrix)
+		shape=alignTwoShapes(meanShape,targetShape,True)
+		# shape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
 
 	return shape
 if __name__=="__main__":
@@ -291,35 +292,34 @@ if __name__=="__main__":
 	face_cascade=cv2.CascadeClassifier(CASCADE_FACE_EYE)
 	average_profile,sgVec=getDataFromProfile_2(PROFILE_FILE)
 	pcaMatrix,meanShape,alignedSet=getDataFromModel(MODEL_FILE)
-	print meanShape.shape
 	sz_ms=meanShape.size
 	# meanShape.shape=(sz_ms/2,2)
 	sz_pm=pcaMatrix.size
 	pcaMatrix.shape=(sz_ms,sz_pm/sz_ms)
-	print pcaMatrix
 	print pcaMatrix.shape
+	# print np.dot(pcaMatrix.transpose()[1],pcaMatrix.transpose()[2].transpose())
 	imgCnt=0
 	for root,dirs,fn in os.walk(PATH_A):
 		imgCnt=len(fn)-3
 	# t=5
 	# t=np.random.randint(imgCnt)
-	t=0
+	t=2
 	img=cv2.imread(PATH_A+"\\"+fn[t])
-	# img=cv2.imread("xicore.jpg")
-	# img=cv2.imread("Face_20.jpg")
+	img=cv2.imread("xicore.jpg")
+	# img=cv2.imread("Face_3.jpg")
 	#initialized shape
 	# drawShape(img,meanShape,(255,0,0,255))
 
 	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
-	# # drawShape(img,initShape,(255,0,0,255))
+	drawShape(img,initShape,COLOR[0])
 
 	# targetShape=updateModelPoints(img,initShape,average_profile,sgVec,3)
 
 	# # drawShape(img,targetShape,(0,0,255,255))
 
 	# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
-	targetShape=match(img,initShape,meanShape,average_profile,sgVec,2)
-	drawShape(img,targetShape,(0,255,0,255))
+	targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,7)
+	drawShape(img,targetShape,COLOR[2])
 
 
 	cv2.imshow("test",img)
