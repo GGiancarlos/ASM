@@ -22,6 +22,7 @@ CASCADE_LEFT_EYE="haarcascade_mcs_lefteye.xml"
 CASCADE_RIGHT_EYE="haarcascade_mcs_righteye.xml"
 CASCADE_FACE_EYE="haarcascade_frontalface_alt.xml"
 INFINITE=1000000
+COLOR=[(255,0,0,255),(0,255,0,255),(0,0,255,255),(0,255,255,255),(255,0,255,255),(255,255,0,255)]
 def loadKeyPoint(FILENAME):
 	fin=open(FILENAME,"r")
 	cnt=0
@@ -135,9 +136,12 @@ def drawShape(img,modelShape,color=(0,255,0,255)):
 	(M,N)=modelShape.shape
 	(height,width,channel)=img.shape
 	for i in range(N/2):
+		# cv2.circle(img,(int(modelShape[i][0]+width*0.5),int(0.5*height-modelShape[i][1])),2,color)
+		
 		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,color)
 	return
-def init(img,face_cascade,left_eye_cascade,meanShape):
+def init(img,face_cascade,left_eye_cascade,MeanShape):
+	meanShape=copy.deepcopy(MeanShape)
 	# drawShape(img,meanShape)
 	haar_scale=1.1
 	min_neighbors=2
@@ -190,24 +194,17 @@ def init(img,face_cascade,left_eye_cascade,meanShape):
 					EyeVec.append((lx+0.5*lw-0.5*width,0.5*height-(ly+0.5*lh)))
 					if len(EyeVec)==2:
 						# print EyeVec[0]+EyeVec[1]
+						sz_ms=meanShape.size
+
+						meanShape.shape=(sz_ms/2,2)
+						m=sz_ms/2
 						targetCenter=np.array([(EyeVec[0][0]+EyeVec[1][0])*0.5,(EyeVec[0][1]+EyeVec[1][1])*0.5])
-						sz=meanShape.size
-						meanShape.shape=(sz/2,2)
-						curCenter=np.array([meanShape.transpose()[0].sum()*2/sz,meanShape.transpose()[1].sum()*2/sz])
+						curCenter=np.array([meanShape.transpose()[0].sum()/m,meanShape.transpose()[1].sum()/m])
 						# print meanShape
-						for j in range(sz/2):
+						for j in range(sz_ms/2):
 							meanShape[j]-=(curCenter-targetCenter)
 						# print meanShape
-						meanShape.shape=(1,sz)
-
-
-
-					
-	drawShape(img,meanShape)
-					
-
-	
-	# cv2.waitKey(0)
+						meanShape.shape=(1,sz_ms)
 
 	return meanShape
 #return a and b
@@ -235,46 +232,95 @@ def search(img,kp,wd,profile,sg):
 	# print "\n"
 
 	return pos
-def updateModel(img,initShape,average_profile,sgVec,wd):
+def updateModelPoints(img,InitShape,average_profile,sgVec,wd):
+	initShape=copy.deepcopy(InitShape)
 	(mP,nP)=average_profile.shape
 	for i in range(mP):
 		kp=[initShape[0][2*i],initShape[0][2*i+1]]
+		# kp=[initShape[i][0],initShape[i][1]]
+
 		profile=average_profile[i]
 		profile.reshape(nP)
 		profile.shape=(1,nP)
 		newPos=search(img,kp,wd,profile,sgVec[i])
 
 		initShape[0][2*i],initShape[0][2*i+1]=newPos[0],newPos[1]
+		# initShape[i][0],initShape[i][1]=newPos[0],newPos[1]
 	return initShape
+def updateModelParas(img,meanShape,targetShape,pcaMatrix):
+	(mPc,nPc)=pcaMatrix.shape
+	b=np.array([0.0 for i in range(1*nPc)])
+	b.shape=(nPc,1)
+
+	iterCnt=10
+	while iterCnt:
+		iterCnt-=1
+
+		x=meanShape+np.dot(pcaMatrix,b).transpose()
+		y=alignTwoShapes(x,targetShape,True)
+
+		k=np.dot(y,meanShape.transpose())
+		y/=float(k)
+		pre_b=b
+		b=np.dot(pcaMatrix.transpose(),(y-meanShape).transpose())
+		diff=np.linalg.norm(pre_b-b,2)
+		# print "diff: ",diff
+		if diff<0.01:
+			break
+
+	return y*k
+def match(img,shape,meanShape,average_profile,sgVec,wd):
+
+	iterCnt=5
+	while iterCnt:
+		iterCnt-=1
+		newShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
+
+		# drawShape(img,newShape,COLOR[iterCnt])
+
+		shape=updateModelParas(img,meanShape,newShape,pcaMatrix)
+
+	return shape
 if __name__=="__main__":
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
 	# test()
-	MODEL_FILE=PATH_B+"\muct-b-landmarks_aligned.model"
-	PROFILE_FILE=PATH_B+"\muct-b_2.profile"
+	MODEL_FILE=PATH_A+"\muct-a-landmarks_aligned.model"
+	PROFILE_FILE=PATH_A+"\muct-a_2.profile"
 	left_eye_cascade =cv2.CascadeClassifier(CASCADE_LEFT_EYE)
 	right_eye_cascade=cv2.CascadeClassifier(CASCADE_RIGHT_EYE)
 	face_cascade=cv2.CascadeClassifier(CASCADE_FACE_EYE)
 	average_profile,sgVec=getDataFromProfile_2(PROFILE_FILE)
 	pcaMatrix,meanShape,alignedSet=getDataFromModel(MODEL_FILE)
-
+	print meanShape.shape
+	sz_ms=meanShape.size
+	# meanShape.shape=(sz_ms/2,2)
+	sz_pm=pcaMatrix.size
+	pcaMatrix.shape=(sz_ms,sz_pm/sz_ms)
+	print pcaMatrix
+	print pcaMatrix.shape
 	imgCnt=0
-	for root,dirs,fn in os.walk(PATH_B):
+	for root,dirs,fn in os.walk(PATH_A):
 		imgCnt=len(fn)-3
 	# t=5
-	t=np.random.randint(imgCnt)
+	# t=np.random.randint(imgCnt)
 	t=0
-	img=cv2.imread(PATH_B+"\\"+fn[t])
+	img=cv2.imread(PATH_A+"\\"+fn[t])
 	# img=cv2.imread("xicore.jpg")
-	img=cv2.imread("Face_3.jpg")
+	# img=cv2.imread("Face_20.jpg")
 	#initialized shape
-	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+	# drawShape(img,meanShape,(255,0,0,255))
 
-	# print initShape.shape
-	# drawShape(img,initShape,(255,0,0,255))
-	print initShape
-	initShape=updateModel(img,initShape,average_profile,sgVec,3)
-	print initShape
-	drawShape(img,initShape,(0,0,255,255))
+	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+	# # drawShape(img,initShape,(255,0,0,255))
+
+	# targetShape=updateModelPoints(img,initShape,average_profile,sgVec,3)
+
+	# # drawShape(img,targetShape,(0,0,255,255))
+
+	# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
+	targetShape=match(img,initShape,meanShape,average_profile,sgVec,2)
+	drawShape(img,targetShape,(0,255,0,255))
+
 
 	cv2.imshow("test",img)
 	cv2.waitKey(0)

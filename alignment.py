@@ -93,14 +93,12 @@ def cenctrilizeShape(sample):
 		sample[i]-=mean
 	# sample.shape=(M*N,1)
 	return sample
-def alignTwoShapes(original,target):
+def alignTwoShapes(original,target,isVector=False):
 	sz_ori=original.size
 	sz_tar=target.size
-	# original.shape=(sz_ori/2,2)
-	# target.shape=(sz_tar/2,2)
-	# M=len(dataSet)
-	# averShape=sum(dataSet)/M
-	# target=averShape
+	if isVector:
+		original.shape=(sz_ori/2,2)
+		target.shape=(sz_tar/2,2)
 	N=len(original)
 	S=[0.0 for x in range(11)]
 	for i in range(N):
@@ -119,8 +117,11 @@ def alignTwoShapes(original,target):
 		S[i]/=N
 	# print original
 	# print original.transpose()
-	# meanOriginal=np.array([original.transpose()[0].sum()/N,original.transpose()[1].sum()/N])
-	# meanTarget=np.array([target.transpose()[0].sum()/N,target.transpose()[1].sum()/N])
+	meanOriginal=np.array([original.transpose()[0].sum()/N,original.transpose()[1].sum()/N])
+	meanTarget=np.array([target.transpose()[0].sum()/N,target.transpose()[1].sum()/N])
+
+	# print meanOriginal
+	# print meanTarget
 	# meanOriginal.shape=(1,2)
 	# meanTarget.shape=(1,2)
 	# # shift=-1*meanOriginal
@@ -149,19 +150,21 @@ def alignTwoShapes(original,target):
 	SB=np.array([S[7],S[9],S[10],S[8],S[2],S[3]])
 	SA.shape=(3,3)
 	SB.shape=(3,2)
-	print SA
-	print SB
 	transMatrix=np.dot(np.linalg.inv(SA),SB)
 	rotateMatrix=transMatrix[:2][:].transpose()
 	offsetMatix=transMatrix[2:3][:]
 	alignedRes=np.dot(rotateMatrix,original.transpose()).transpose()
 	for i in range(N):
-		alignedRes[i][0]+=offsetMatix[0][0]
-		alignedRes[i][1]+=offsetMatix[0][1]
+		alignedRes[i][0]+=offsetMatix[0][0]-(meanOriginal[0]-meanTarget[0])
+		alignedRes[i][1]+=offsetMatix[0][1]-(meanOriginal[1]-meanTarget[1])
 	# original.shape=(sz_ori,1)
 	# target.shape=(sz_tar,1)
+
 	# res=alignedRes.reshape(sz_ori)
 	# res.shape=(sz_ori,1)
+	if isVector:
+		alignedRes=alignedRes.reshape(sz_ori)
+		alignedRes.shape=(1,sz_ori)
 	return alignedRes
 def aligenDataSet(trainData,Iter=5):
 	print "aligenDataSet"
@@ -198,6 +201,8 @@ def aligenDataSet(trainData,Iter=5):
 		trainData[i]=trainData[i].reshape(2*N,1)
 		trainData[i].shape=(1,2*N)
 	curTarget.shape=(1,2*N)
+
+
 	return trainData,curTarget
 def saveKeyPoints(dataset,meanshape,filename):
 	fout=open(filename,"w")
