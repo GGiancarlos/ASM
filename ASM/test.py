@@ -4,15 +4,8 @@
 #*Date:
 #*********************
 import numpy as np
-
-A=np.array([[1,2],[3,4]])
-B=np.array([[5.9,6],[7,8]])
-print "A:\n",A
-print "B:\n",B
-C=np.dot(A,B)
-print "C=A*B:"
-print C
-print "B=A^-1*C:"
-print np.dot(np.linalg.inv(A),C)
-print np.linalg.norm(A,2)
-print dir(C)
+A=np.array(np.random.randint(0,100,9))
+A.shape=(3,3)
+print A
+print A[:,0].shape
+print A.transpose()[0].transpose().shape

@@ -56,6 +56,9 @@ def getDataFromModel(ModelName):
 	# print pcaMatrix
 			
 	return pcaMatrix,meanShape,alignedSet
+
+
+#.....................................................................................................
 if __name__=="__main__":
 	argvs=sys.argv
 	CAMERA_LIST=('a','b','c','d','e')
@@ -77,20 +80,20 @@ if __name__=="__main__":
 		print "origninal eye landmark data:",CSVDATA_EYE
 		if opt=='y':
 
-			saveFileName=SAVEPATH+"\muct-"+camera+"-landmarks_aligned"+".model"
+			saveFileName=SAVEPATH+"\muct-"+camera+"-landmarks_aligned_2"+".model"
 			iterCnt=5
 		elif opt=='n':
 			saveFileName=SAVEPATH+"\muct-"+camera+"-landmarks_original"+".model"
 			iterCnt=0
 		landMarks=getMarkForCamera(CAMERA_LIST.index(camera)+1,CSVDATA_EYE)
 		landMarks,averageShape=aligenDataSet(landMarks,iterCnt)
-		zVec,Ureduce=PCA(landMarks,pcaCnt=5)
+		zVec,Ureduce=PCA_2(landMarks,pcaCnt=5)
 		(pM,pN)=Ureduce.shape
 		print "PCA matrix: ",(pM,pN)
 		fout=open(saveFileName,"w")
 		fout.writelines("format:label:data\n")
 		fout.writelines("If label==1,data is the PrincipalComponentsMatrix P.If label==2,data is the mean shape.\n")
-		Ureduce.reshape(pM,pN)
+		Ureduce=Ureduce.reshape(pM*pN)
 		Ureduce.shape=(1,pM*pN)
 		for i in range(len(landMarks)+2):
 			if i==0:

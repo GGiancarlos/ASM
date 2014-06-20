@@ -254,14 +254,16 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 
 	iterCnt=10
 	while iterCnt:
+		# print b
 		iterCnt-=1
 
 		x=meanShape+np.dot(pcaMatrix,b).transpose()
+
 		y=alignTwoShapes(x,targetShape,True)
 
-		k=1.0/np.dot(y,meanShape.transpose())
+		# k=1.0/np.dot(y,meanShape.transpose())
 
-		y*=k
+		# y*=k
 		pre_b=b
 		b=np.dot(pcaMatrix.transpose(),(y-meanShape).transpose())
 		diff=np.linalg.norm(pre_b-b,2)
@@ -269,23 +271,23 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 		if diff<0.01:
 			break
 
-	return y/k
+	return y
 def match(img,shape,meanShape,average_profile,sgVec,pcaMatrix,wd):
-
-	iterCnt=5
+	print "start match."
+	iterCnt=2
 	while iterCnt:
 		iterCnt-=1
 		targetShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
 
-		# drawShape(img,newShape,COLOR[iterCnt])
-		shape=alignTwoShapes(meanShape,targetShape,True)
-		# shape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
+		# drawShape(img,targetShape,COLOR[iterCnt])
+		# shape=alignTwoShapes(meanShape,targetShape,True)
+		shape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
 
 	return shape
 if __name__=="__main__":
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
 	# test()
-	MODEL_FILE=PATH_A+"\muct-a-landmarks_aligned.model"
+	MODEL_FILE=PATH_A+"\muct-a-landmarks_aligned_2.model"
 	PROFILE_FILE=PATH_A+"\muct-a_2.profile"
 	left_eye_cascade =cv2.CascadeClassifier(CASCADE_LEFT_EYE)
 	right_eye_cascade=cv2.CascadeClassifier(CASCADE_RIGHT_EYE)
@@ -302,11 +304,13 @@ if __name__=="__main__":
 	for root,dirs,fn in os.walk(PATH_A):
 		imgCnt=len(fn)-3
 	# t=5
-	# t=np.random.randint(imgCnt)
-	t=2
+	t=np.random.randint(imgCnt)
+	# t=5
 	img=cv2.imread(PATH_A+"\\"+fn[t])
 	img=cv2.imread("xicore.jpg")
 	# img=cv2.imread("Face_3.jpg")
+	# img=cv2.imread("Face_23.jpg")
+
 	#initialized shape
 	# drawShape(img,meanShape,(255,0,0,255))
 
@@ -318,7 +322,7 @@ if __name__=="__main__":
 	# # drawShape(img,targetShape,(0,0,255,255))
 
 	# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
-	targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,7)
+	targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,10)
 	drawShape(img,targetShape,COLOR[2])
 
 

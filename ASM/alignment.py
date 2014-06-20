@@ -198,7 +198,7 @@ def aligenDataSet(trainData,Iter=5):
 		cnt+=1
 		Iter-=1
 	for i in range(M):
-		trainData[i]=trainData[i].reshape(2*N,1)
+		trainData[i]=trainData[i].reshape(2*N)
 		trainData[i].shape=(1,2*N)
 	curTarget.shape=(1,2*N)
 
@@ -245,31 +245,24 @@ if __name__=="__main__":
 	trainData,averageShape=aligenDataSet(trainData[:M])
 	saveKeyPoints(trainData[:M],averageShape,"asm_0"+str(camera_pos)+".kp")
 
-	zVec,Ureduce=PCA(trainData)
+	zVec,Ureduce=PCA_2(trainData)
+	xVec=reconstruction(zVec,Ureduce)
+	# t=np.random.randint(100)
+	t=8
+	print xVec[t].transpose()-trainData[t]
+	print np.linalg.norm(xVec[t]-trainData[t].transpose(),2)
 	averageShape.shape=(N,2)
-	plt.figure("MeanShape")
-	# ax1=plt.subplot(211)
-	# ax2=plt.subplot(212)
-	# for i in range(4):
-
-	# plt.sca(ax1)
-
-	plt.plot(averageShape.transpose()[0],averageShape.transpose()[1],COLOR[1],marker='o',linestyle=' ',label="Mean Shape")
-	# plt.xlim(-120,120)
-	# plt.ylim(-30,30)
-
-	plt.legend()
 	# plt.xlabel("MeanShape")
 	plt.figure("Alignment")
 	# plt.sca(ax2)
 	K=len(trainData)
-	plt.plot(averageShape.transpose()[0],averageShape.transpose()[1],COLOR[3],marker='o',linestyle=' ',label="Mean Shape")
 	for i in range(K):
 		trainData[i].shape=(N,2)
 		if i==0:
 			plt.plot(trainData[i].transpose()[0],trainData[i].transpose()[1],COLOR[0],marker="+",linestyle=' ',label="Aligned DataSet.Top "+str(K))
 		else:
 			plt.plot(trainData[i].transpose()[0],trainData[i].transpose()[1],COLOR[0],marker="+",linestyle=' ')
+	plt.plot(averageShape.transpose()[0],averageShape.transpose()[1],COLOR[3],marker='o',linestyle=' ',label="Mean Shape")
 
 	# plt.xlim(-120,120)
 	plt.xlabel("Aligned DataSet.Top "+str(K))
