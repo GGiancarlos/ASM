@@ -10,6 +10,7 @@ from align import *
 import numpy as np
 from calcLocalProfile import *
 from alignment import *
+from init import *
 import os
 import string
 IPLIMAGE="<type 'cv2.cv.iplimage'>"
@@ -140,98 +141,33 @@ def drawShape(img,modelShape,color=(0,255,0,255)):
 		
 		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,color)
 	return
-def init(img,face_cascade,left_eye_cascade,MeanShape):
-	meanShape=copy.deepcopy(MeanShape)
-	# drawShape(img,meanShape)
-	haar_scale=1.1
-	min_neighbors=2
-	(height,width,channel)=img.shape
-	haar_flags=cv.CV_HAAR_SCALE_IMAGE
-	min_facesize=(int(0.3*width),int(0.3*height))
-	min_eyesize=(int(0.2*min_facesize[0]),int(0.2*min_facesize[1]))
-	max_eyeSize=(int(0.25*min_facesize[0]),int(0.25*min_facesize[1]))
-	# (height,width,channel)=img.shape
-	gray=cv2.cvtColor(img,cv.CV_BGR2GRAY)
-	cv2.equalizeHist(gray, gray)
 
-	leftEye=left_eye_cascade.detectMultiScale(img,haar_scale, min_neighbors, haar_flags,min_eyesize)
-	faces=face_cascade.detectMultiScale(img,haar_scale, min_neighbors, haar_flags,min_facesize)
-	# facesEye= cv.HaarDetectObjects(gray, right_eye_cascade, cv.CreateMemStorage(0),haar_scale, min_neighbors, haar_flags, (20,20))
-	cmp=lambda eye1,eye2:1 if eye1[2]*eye1[3]>eye2[2]*eye2[3] else 0
-	EYE_FOUND=1
-	# if rightEye:
-	# 	for (rx, ry, rw, rh),rn in rightEye:
-	# 		image_scale=1
-	# 		pt1 = (int(rx * image_scale), int(ry * image_scale))
-	# 		pt2 = (int((rx + rw) * image_scale), int((ry + rh) * image_scale))
-			# cv.Rectangle(img, pt1, pt2, cv.RGB(0, 255, 0), 3, 8, 0)
-	if len(faces):
-		faces=faces.tolist()
-		faces.sort(cmp)
-		for (x, y, w, h) in faces[:1]:
-
-			image_scale=1
-			# the input to cv.HaarDetectObjects was resized, so scale the 
-			# bounding box of each face and convert it to two CvPoints
-			pt1 = (int(x * image_scale), int(y * image_scale))
-			pt2 = (int((x + w) * image_scale), int((y + h) * image_scale))
-			cv2.rectangle(img, pt1, pt2, cv.RGB(0, 0, 255), 3, 8, 0)
-
-			if len(leftEye):
-				leftEye=leftEye.tolist()
-				EyeVec=[]
-				leftEye.sort(cmp)
-				# print leftEye
-				for (lx, ly, lw, lh) in leftEye[:]:
-					# print (x, y, w, h),(lx, ly, lw, lh)
-					if (lx+0.5*lw)<x or (lx+0.5*lw)>x+w or (ly+0.5*lh)<y+0.3*h or (ly+0.5*lh)>y+0.5*h:
-						continue 
-					# print n
-					image_scale=1
-					# pt1 = (int(lx * image_scale), int(ly * image_scale))
-					# pt2 = (int((lx + lw) * image_scale), int((ly + lh) * image_scale))
-					# cv.Rectangle(img, pt1, pt2, cv.RGB(255, 0, 0), 3, 8, 0)
-					EyeVec.append((lx+0.5*lw-0.5*width,0.5*height-(ly+0.5*lh)))
-					if len(EyeVec)==2:
-						# print EyeVec[0]+EyeVec[1]
-						sz_ms=meanShape.size
-
-						meanShape.shape=(sz_ms/2,2)
-						m=sz_ms/2
-						targetCenter=np.array([(EyeVec[0][0]+EyeVec[1][0])*0.5,(EyeVec[0][1]+EyeVec[1][1])*0.5])
-						curCenter=np.array([meanShape.transpose()[0].sum()/m,meanShape.transpose()[1].sum()/m])
-						# print meanShape
-						for j in range(sz_ms/2):
-							meanShape[j]-=(curCenter-targetCenter)
-						# print meanShape
-						meanShape.shape=(1,sz_ms)
-
-	return meanShape
 #return a and b
 def search(img,kp,wd,profile,sg):
 	inv_sg=np.linalg.inv(sg)
 	(mP,nP)=profile.shape
 	minDst=INFINITE
-	pos=(0,0)
+	pos=-1
+	search_kp=[]
 	for i in range(int(kp[0])-wd,int(kp[0])+wd+1):
 		for j in range(int(kp[1])-wd,int(kp[1])+wd+1):
-			search_kp=[i,j]
-			curProfile,search_kp=calcSiftDes(img,search_kp,auto_orientation=False,angle=0)
-			diff=curProfile-profile
+			search_kp.extend([i,j])
 
-			distance=np.dot(np.dot(diff,inv_sg),diff.transpose())
+	search_profile,search_kps=calcSiftDes(img,search_kp,auto_orientation=False,angle=0)
 
-
-			if minDst>distance[0][0]:
-				minDst=distance[0][0]
-				pos=(i,j)
+	for t in range(len(search_profile)):
+		curProfile=search_profile[t]
+		diff=curProfile-profile
+		distance=np.dot(np.dot(diff,inv_sg),diff.transpose())
 
 
-
+		if minDst>distance[0][0]:
+			minDst=distance[0][0]
+			pos=t
 
 	# print "\n"
 
-	return pos
+	return search_kp[2*pos:2*pos+2]
 def updateModelPoints(img,InitShape,average_profile,sgVec,wd):
 	initShape=copy.deepcopy(InitShape)
 	(mP,nP)=average_profile.shape
@@ -252,11 +188,10 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 	b=np.array([0.0 for i in range(1*nPc)])
 	b.shape=(nPc,1)
 
-	iterCnt=10
+	iterCnt=5
 	while iterCnt:
 		# print b
 		iterCnt-=1
-
 		x=meanShape+np.dot(pcaMatrix,b).transpose()
 
 		y=alignTwoShapes(x,targetShape,True)
@@ -266,22 +201,33 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 		# y*=k
 		pre_b=b
 		b=np.dot(pcaMatrix.transpose(),(y-meanShape).transpose())
-		diff=np.linalg.norm(pre_b-b,2)
-		# print "diff: ",diff
-		if diff<0.01:
+		bDist=np.linalg.norm(pre_b-b,2)
+		print "bDist: ",bDist
+		if bDist<0.05:
 			break
 
 	return y
 def match(img,shape,meanShape,average_profile,sgVec,pcaMatrix,wd):
 	print "start match."
-	iterCnt=2
+	iterCnt=5
+	pre_shape=shape
 	while iterCnt:
+		print iterCnt," iterations","remains"
+		if iterCnt==10:
+
+			drawShape(img,shape,COLOR[4])
 		iterCnt-=1
 		targetShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
 
 		# drawShape(img,targetShape,COLOR[iterCnt])
 		# shape=alignTwoShapes(meanShape,targetShape,True)
+		pre_shape=shape
 		shape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
+		shapeDistance=np.linalg.norm(pre_shape-shape,2)
+		tolerance=0.01*np.linalg.norm(shape,2)
+		print "shapeDistance: ",shapeDistance,"tolerance: ",tolerance
+		if shapeDistance<tolerance:
+			break
 
 	return shape
 if __name__=="__main__":
@@ -303,29 +249,53 @@ if __name__=="__main__":
 	imgCnt=0
 	for root,dirs,fn in os.walk(PATH_A):
 		imgCnt=len(fn)-3
-	# t=5
-	t=np.random.randint(imgCnt)
-	# t=5
-	img=cv2.imread(PATH_A+"\\"+fn[t])
-	img=cv2.imread("xicore.jpg")
-	# img=cv2.imread("Face_3.jpg")
-	# img=cv2.imread("Face_23.jpg")
+	t=5
+	t=0
+	for t in range(0,2,60):
+		t=np.random.randint(imgCnt)
 
-	#initialized shape
-	# drawShape(img,meanShape,(255,0,0,255))
+		imgName=PATH_A+"\\"+fn[t]
+		imgNameSave=PATH_A+"\\m2_"+fn[t]
+		print t," ",imgName
+		img=cv2.imread(imgName)
 
-	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
-	drawShape(img,initShape,COLOR[0])
+		# img=cv2.imread("xicore.jpg")
+		# img=cv2.imread("Face_3.jpg")
+		# img=cv2.imread("Face_23.jpg")
 
-	# targetShape=updateModelPoints(img,initShape,average_profile,sgVec,3)
+		#initialized shape
+		# drawShape(img,meanShape,(255,0,0,255))
 
-	# # drawShape(img,targetShape,(0,0,255,255))
+		initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+		# drawShape(img,initShape,COLOR[0])
+		# cv2.imshow(imgNameSave,img)
 
-	# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
-	targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,10)
-	drawShape(img,targetShape,COLOR[2])
+		# targetShape=updateModelPoints(img,initShape,average_profile,sgVec,3)
 
+		# drawShape(img,targetShape,(0,0,255,255))
 
-	cv2.imshow("test",img)
+		# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
+		targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,10)
+		drawShape(img,targetShape,COLOR[2])
+
+		#cv2.imshow(imgName,img)
+		cv2.imshow(imgNameSave,img)
+		cv2.imwrite(imgNameSave,img)
 	cv2.waitKey(0)
+	# cvCapture=cv2.VideoCapture(0)
+
+	# while cvCapture:
+	# 	ret,img=cvCapture.read()
+
+	# 	initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+	# 	drawShape(img,initShape,COLOR[0])
+	# 	targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,1)
+	# 	drawShape(img,targetShape,COLOR[2])
+	# 	cv2.imshow("camera",img)
+	# 	if cv2.waitKey(5) == 27:
+	# 		break
+
+
+
+
 
