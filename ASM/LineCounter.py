@@ -1,7 +1,7 @@
 #*********************
 #*Author:YuliWANG@SunYatSenUniv.
 #*Lang:Python
-#*Date:2014.6.21
+#*Date:
 #*********************
 import os
 import re

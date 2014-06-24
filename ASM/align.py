@@ -4,6 +4,7 @@
 #*Date:
 #*********************
 from alignment import *
+from utils import *
 import sys
 import matplotlib.pyplot as plt
 import copy
@@ -26,36 +27,7 @@ def getMarkForCamera(camera,originalData):
 			trainData.append(data)
 		cnt+=1
 	return trainData
-def getDataFromModel(ModelName):
-	fin=open(ModelName,"r")
-	fin.readline()
-	fin.readline()
-	# meanShape=[]
-	# pcaMatrix=None
-	cnt=0
-	alignedSet=[]
 
-	for line in fin.readlines():
-		temp=line.strip().split(":")
-		label=int(temp[0])
-		data=temp[1].split(" ")
-		# print data
-		if label==1:
-			pcaMatrix=np.array(np.vectorize(float)(data))
-		elif label==2:
-			meanShape=np.array(np.vectorize(float)(data))
-		else:
-			alignedSet.append(np.vectorize(float)(data))
-	szMean=meanShape.size
-	szPca=pcaMatrix.size
-	pcaMatrix.reshape(1,szPca)
-	pcaMatrix.shape=(szPca/szMean,szMean)
-	meanShape.reshape(1,szMean)
-	meanShape.shape=(1,szMean)
-	# print meanShape.shape,pcaMatrix.shape
-	# print pcaMatrix
-			
-	return pcaMatrix,meanShape,alignedSet
 
 
 #.....................................................................................................

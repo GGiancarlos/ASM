@@ -9,7 +9,7 @@ import cv2
 import cv2.cv as cv
 import sys
 import os
-from align import *
+from utils import *
 import numpy as np
 IPLIMAGE="<type 'cv2.cv.iplimage'>"
 NARRAY="<type 'numpy.ndarray'>"
@@ -22,7 +22,7 @@ def getAngle(ptA,ptB):
 	else:
 		tg=(ptA[1]-ptB[1])/(ptA[0]-ptB[0])
 		return np.arctan(tg)*180.0/np.pi+90
-def calcSiftDes(img,mpoints,auto_orientation=False,angle=0):
+def calcSiftDes(img,mpoints,auto_orientation=False,angle=0,scale=1.0):
 	points=copy.deepcopy(mpoints)
 	# img=cv2.imread(imgName,cv2.IMREAD_COLOR)
 	
@@ -32,8 +32,8 @@ def calcSiftDes(img,mpoints,auto_orientation=False,angle=0):
 	cnt=len(points)
 	kp=[]
 	for i in range(cnt/2):
-		points[2*i]=0.5*width+points[2*i]
-		points[2*i+1]=0.5*height-points[2*i+1]
+		points[2*i]=0.5*width+points[2*i]*scale
+		points[2*i+1]=0.5*height-points[2*i+1]*scale
 
 		kp.append(cv2.KeyPoint(points[2*i],points[2*i+1],4))
 	for i in range(cnt/2):

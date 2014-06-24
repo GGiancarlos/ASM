@@ -6,9 +6,10 @@
 #test for ASM alg.
 import cv2
 import cv2.cv as cv
+from align import *
 import numpy as np
 from calcLocalProfile import *
-from utils import *
+from alignment import *
 from init import *
 import os
 import string
@@ -86,18 +87,63 @@ def test():
 	cv2.imshow("test",img)
 	cv2.waitKey(0)
 	return
+def getDataFromProfile(profileName):
+	fin=open(profileName,"r")
+	M=int(fin.readline().strip().split(":")[1])
+	average_profile=np.array([0.0 for i in range(M*128)])
+	profileVec=[]
+	cnt=0
+	for line in fin.readlines():
+		temp=line.strip().split(":")[1]
+		L=len(temp)
+		data_temp=temp[1:L-2].split("], ")
+		data=[]
+		for i in range(len(data_temp)):
+			data.extend(data_temp[i][1:].split(", "))
+		profile=np.array(np.vectorize(float)(data))
+		average_profile+=profile
+		profileVec.append(profile)
+		cnt+=1
 
+	average_profile/=cnt
+	average_profile.reshape(M*128)
+	average_profile.shape=(M,128)
+	# print average_profile
+	return average_profile
+def getDataFromProfile_2(profileName):
+	fin=open(profileName,"r")
+	fin.readline()
+	MN=fin.readline().strip().split(":")[1].strip().split(" ")
+	mP,nP=int(MN[0]),int(MN[1])
+	convVec=[]
+	for i in range(mP+1):
+		line=fin.readline().strip().split(":")[1]
+		l=len(line)
+		data=np.vectorize(float)(line[1:l-1].strip().split(","))
+		if i==0:
+			average_profile=np.array(data)
+			average_profile.reshape(mP*nP)
+			average_profile.shape=(mP,nP)
+		else:
+			conv=np.array(data)
+			conv.reshape(nP*nP)
+			conv.shape=(nP,nP)
+			convVec.append(conv)
+
+
+
+	return average_profile,convVec
 def drawShape(img,modelShape,color=(0,255,0,255)):
 	(M,N)=modelShape.shape
 	(height,width,channel)=img.shape
 	for i in range(N/2):
 		# cv2.circle(img,(int(modelShape[i][0]+width*0.5),int(0.5*height-modelShape[i][1])),2,color)
 		
-		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),1,color)
+		cv2.circle(img,(int(modelShape[0][2*i]+width*0.5),int(0.5*height-modelShape[0][2*i+1])),2,color)
 	return
 
 #return a and b
-def search(img,kp,wd,profile,sg,_scale=1.0):
+def search(img,kp,wd,profile,sg):
 	inv_sg=np.linalg.inv(sg)
 	(mP,nP)=profile.shape
 	minDst=INFINITE
@@ -106,7 +152,8 @@ def search(img,kp,wd,profile,sg,_scale=1.0):
 	for i in range(int(kp[0])-wd,int(kp[0])+wd+1):
 		for j in range(int(kp[1])-wd,int(kp[1])+wd+1):
 			search_kp.extend([i,j])
-	search_profile,search_kps=calcSiftDes(img,search_kp,auto_orientation=False,angle=0,scale=_scale)
+
+	search_profile,search_kps=calcSiftDes(img,search_kp,auto_orientation=False,angle=0)
 
 	for t in range(len(search_profile)):
 		curProfile=search_profile[t]
@@ -120,11 +167,10 @@ def search(img,kp,wd,profile,sg,_scale=1.0):
 
 	# print "\n"
 
-	return search_kp[2*pos:2*pos+2],minDst
-def updateModelPoints(img,InitShape,average_profile,sgVec,wd,scale):
+	return search_kp[2*pos:2*pos+2]
+def updateModelPoints(img,InitShape,average_profile,sgVec,wd):
 	initShape=copy.deepcopy(InitShape)
 	(mP,nP)=average_profile.shape
-	sumDist=0.0
 	for i in range(mP):
 		kp=[initShape[0][2*i],initShape[0][2*i+1]]
 		# kp=[initShape[i][0],initShape[i][1]]
@@ -132,17 +178,17 @@ def updateModelPoints(img,InitShape,average_profile,sgVec,wd,scale):
 		profile=average_profile[i]
 		profile.reshape(nP)
 		profile.shape=(1,nP)
-		newPos,curMinDst=search(img,kp,wd,profile,sgVec[i],scale)
-		sumDist+=curMinDst
+		newPos=search(img,kp,wd,profile,sgVec[i])
+
 		initShape[0][2*i],initShape[0][2*i+1]=newPos[0],newPos[1]
 		# initShape[i][0],initShape[i][1]=newPos[0],newPos[1]
-	return initShape,sumDist
+	return initShape
 def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 	(mPc,nPc)=pcaMatrix.shape
 	b=np.array([0.0 for i in range(1*nPc)])
 	b.shape=(nPc,1)
 
-	iterCnt=8
+	iterCnt=5
 	while iterCnt:
 		# print b
 		iterCnt-=1
@@ -156,32 +202,34 @@ def updateModelParas(img,meanShape,targetShape,pcaMatrix):
 		pre_b=b
 		b=np.dot(pcaMatrix.transpose(),(y-meanShape).transpose())
 		bDist=np.linalg.norm(pre_b-b,2)
-		# print "bDist: ",bDist
+		print "bDist: ",bDist
 		if bDist<0.05:
 			break
 
 	return y
-def match(img,shape,meanShape,average_profile,sgVec,pcaMatrix,wd,scale):
+def match(img,shape,meanShape,average_profile,sgVec,pcaMatrix,wd):
+	print "start match."
 	iterCnt=5
+	pre_shape=shape
 	while iterCnt:
-		# print iterCnt," iterations","remains"
-		# if iterCnt==10:
+		print iterCnt," iterations","remains"
+		if iterCnt==10:
 
-		# 	drawShape(img,shape,COLOR[4])
+			drawShape(img,shape,COLOR[4])
 		iterCnt-=1
-		targetShape,sumDist=updateModelPoints(img,shape,average_profile,sgVec,wd,scale)
-		# print targetShape
+		targetShape=updateModelPoints(img,shape,average_profile,sgVec,wd)
+
 		# drawShape(img,targetShape,COLOR[iterCnt])
 		# shape=alignTwoShapes(meanShape,targetShape,True)
 		pre_shape=shape
 		shape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
 		shapeDistance=np.linalg.norm(pre_shape-shape,2)
 		tolerance=0.01*np.linalg.norm(shape,2)
-		# print "shapeDistance: ",shapeDistance,"tolerance: ",tolerance
+		print "shapeDistance: ",shapeDistance,"tolerance: ",tolerance
 		if shapeDistance<tolerance:
 			break
 
-	return shape,sumDist
+	return shape
 if __name__=="__main__":
 	print "Test for ASM alg.YuliWANG@SunYatSenUniv.\nRunning..."
 	# test()
@@ -190,44 +238,46 @@ if __name__=="__main__":
 	left_eye_cascade =cv2.CascadeClassifier(CASCADE_LEFT_EYE)
 	right_eye_cascade=cv2.CascadeClassifier(CASCADE_RIGHT_EYE)
 	face_cascade=cv2.CascadeClassifier(CASCADE_FACE_EYE)
-	average_profile,sgVec,nResolution=getDataFromProfile(PROFILE_FILE)
+	average_profile,sgVec=getDataFromProfile_2(PROFILE_FILE)
 	pcaMatrix,meanShape,alignedSet=getDataFromModel(MODEL_FILE)
+	sz_ms=meanShape.size
+	# meanShape.shape=(sz_ms/2,2)
+	sz_pm=pcaMatrix.size
+	pcaMatrix.shape=(sz_ms,sz_pm/sz_ms)
+	print pcaMatrix.shape
 	# print np.dot(pcaMatrix.transpose()[1],pcaMatrix.transpose()[2].transpose())
 	imgCnt=0
 	for root,dirs,fn in os.walk(PATH_A):
 		imgCnt=len(fn)-3
+	t=5
+	t=0
 	for t in range(0,2,60):
-
 		t=np.random.randint(imgCnt)
 		t=0
 		imgName=PATH_A+"\\"+fn[t]
-		imgNameSave="res\\"+"\\m2_"+fn[t]
+		imgNameSave=PATH_A+"\\m2_"+fn[t]
 		print t," ",imgName
 		img=cv2.imread(imgName)
-		(h,w,channel)=img.shape
+
 		# img=cv2.imread("xicore.jpg")
 		# img=cv2.imread("Face_3.jpg")
-		# img=cv2.imread("Face_23.jpg")
-		# img=cv2.imread("Face_9.jpg")
+		# img=cv2.imread("Face_29.jpg")
+
 		#initialized shape
 		# drawShape(img,meanShape,(255,0,0,255))
-		(h,w,channel)=img.shape
-		scaleIndex=0
-		scale=1.0
-		img=cv2.resize(img,(int(scale*w),int(scale*h)))
-		# meanShape*=scale
-		# pcaMatrix*=scale
-		initShape=init(img,face_cascade,left_eye_cascade,meanShape)
 
+		initShape=init(img,face_cascade,left_eye_cascade,meanShape)
+		# drawShape(img,initShape,COLOR[0])
+		# cv2.imshow(imgNameSave,img)
 
 		# targetShape=updateModelPoints(img,initShape,average_profile,sgVec,3)
 
 		# drawShape(img,targetShape,(0,0,255,255))
 
 		# targetShape=updateModelParas(img,meanShape,targetShape,pcaMatrix)
-		targetShape,minProfileDist=match(img,initShape,meanShape,average_profile[0],sgVec[0],pcaMatrix,15,scale)
+		targetShape=match(img,initShape,meanShape,average_profile,sgVec,pcaMatrix,10)
 		drawShape(img,targetShape,COLOR[2])
-		cv2.namedWindow(imgNameSave,flags=cv.CV_WINDOW_AUTOSIZE)
+
 		#cv2.imshow(imgName,img)
 		cv2.imshow(imgNameSave,img)
 		cv2.imwrite(imgNameSave,img)
