@@ -22,6 +22,8 @@ class ASM_ModelBuilder():
 		self.imgCnt=len(self.imgNameVec)
 		self.fout=open(self.saveFileName,'w')
 		self.resolutionScale=[1.0,0.5,0.25]
+		# self.resolutionScale=[1.0]
+
 		self.pcaMatrix,self.meanShape,self.alignedSet=getDataFromModel(self.modelName)
 		self.__mPfCalcLocalProfile=None
 	def setLocalProfileFun(self,pfCalcLocalProfile):
@@ -51,8 +53,10 @@ class ASM_ModelBuilder():
 				profileVec[i].append(des)
 		self.fout.writelines("LocalProfile caclulated with SIFT descriptor.\n")
 		print len(profileVec)
+		# print profileVec
 		for index_scale in range(len(self.resolutionScale)):
 			mean=sum(profileVec[index_scale])/len(self.imgNameVec)
+			print mean.shape		
 			(mP,nP)=mean.shape
 			if index_scale==0:
 				self.fout.writelines("ParametersOfProfile(mP,nP,cntResolution)"+":"+str(mP)+" "+str(nP)+" "+str(len(self.resolutionScale))+"\n")
@@ -147,7 +151,7 @@ class ASM_Fitter(object):
 		b=np.array([0.0 for i in range(1*nPc)])
 		b.shape=(nPc,1)
 	
-		iterCnt=8
+		iterCnt=12
 		while iterCnt:
 			# print b
 			iterCnt-=1
@@ -217,14 +221,14 @@ class ASM_Fitter(object):
 				minSumDist=sumDist
 				bestShape=targetShape
 
-			print "scale:",scale," ",sumDist
+			# print "scale:",scale," ",sumDist
 			scale/=float(2.0)
-		print "Best Scale: ",bestScale
+		# print "Best Scale: ",bestScale
 
 
 		self.__fittingResult=bestShape/float(bestScale)
 
-		return
+		return minSumDist
 	def visualizeResult(self,title="ASM Fitting Result: ",color=(0,0,255,255)):
 		if self.__mImg==None:
 			print "image not given."
@@ -234,7 +238,7 @@ class ASM_Fitter(object):
 			return
 		drawShape(self.__mImg,self.__fittingResult,color)
 		cv2.imshow(title,self.__mImg)
-		cv2.waitKey(0)
+		# cv2.waitKey(0)
 
 		return
 	def getFittingResult(self):
@@ -244,30 +248,118 @@ class ASM_Fitter(object):
 
 		return
 
+class MultiOrientationASM_Fitter(ASM_Fitter):
+	def __init__(self, profileNameA,alignedModelName,eyeCascade,faceCascade,
+					profileNameB=None,alignedModelNameB=None,
+					profileNameC=None,alignedModelNameC=None,
+					profileNameD=None,alignedModelNameD=None,
+					profileNameE=None,alignedModelNameE=None):
+		ASM_Fitter.__init__(self,profileNameA,alignedModelName, eyeCascade, faceCascade)
+		if profileNameB and alignedModelNameB:
+			self.pcaMatrixB,self.meanShapeB,self.alignedSetB=getDataFromModel(alignedModelNameB)
+			self.average_profileB,self.sgVecB,self.nResolutionB=getDataFromProfile(profileNameB)
+			self.isHaveFitterB=True
+		else:
+			self.isHaveFitterB=False
 
+		if profileNameC and alignedModelNameC:
+			self.pcaMatrixC,self.meanShapeC,self.alignedSetC=getDataFromModel(alignedModelNameC)
+			self.average_profileC,self.sgVecC,self.nResolutionC=getDataFromProfile(profileNameC)
+			self.isHaveFitterC=True
 
+		else:
+			self.isHaveFitterC=False
 
+		if profileNameD and alignedModelNameD:
+			self.pcaMatrixD,self.meanShapeD,self.alignedSetD=getDataFromModel(alignedModelNameD)
+			self.average_profileD,self.sgVecD,self.nResolutionD=getDataFromProfile(profileNameD)
+			self.isHaveFitterD=True
+
+		else:
+			self.isHaveFitterD=False
+		if profileNameE and alignedModelNameE:
+			self.pcaMatrixE,self.meanShapeE,self.alignedSetE=getDataFromModel(alignedModelNameE)
+			self.average_profileE,self.sgVecE,self.nResolutionE=getDataFromProfile(profileNameE)
+			self.isHaveFitterE=True
+
+		else:
+			self.isHaveFitterE=False
+		return
+	def transData(self,curPcaMatrix,curMeanShape,curAlignedSet,curProfile,curSgVec):
+		self.pcaMatrix=curPcaMatrix
+		self.meanShape=curMeanShape
+		self.alignedSet=curAlignedSet
+		self.average_profile=curProfile
+		self.sgVec=curSgVec
+		return
+	def multiFitShape(self,img):
+
+		minDist=ASM_Fitter.fitShape(self,img)
+		bestShape=ASM_Fitter.getFittingResult(self)
+		bestShapeLabel='a'
+		if self.isHaveFitterB:
+			self.transData(self.pcaMatrixB,self.meanShapeB,self.alignedSetB,self.average_profileB,self.sgVecB)
+			curDist=ASM_Fitter.fitShape(self,img)
+			curShape=ASM_Fitter.getFittingResult(self)
+
+			if curDist<minDist:
+				minDist=curDist
+				bestShape=curShape
+				bestShapeLabel='b'
+		if self.isHaveFitterC:
+			self.transData(self.pcaMatrixC,self.meanShapeC,self.alignedSetC,self.average_profileC,self.sgVecC)
+			curDist=ASM_Fitter.fitShape(self,img)
+			curShape=ASM_Fitter.getFittingResult(self)
+
+			if curDist<minDist:
+				minDist=curDist
+				bestShape=curShape
+				bestShapeLabel='c'
+		if self.isHaveFitterD:
+			self.transData(self.pcaMatrixD,self.meanShapeD,self.alignedSetD,self.average_profileD,self.sgVecD)
+			curDist=ASM_Fitter.fitShape(self,img)
+			curShape=ASM_Fitter.getFittingResult(self)
+
+			if curDist<minDist:
+				minDist=curDist
+				bestShape=curShape
+				bestShapeLabel='d'
+		if self.isHaveFitterE:
+			self.transData(self.pcaMatrixE,self.meanShapeE,self.alignedSetE,self.average_profileE,self.sgVecE)
+			curDist=ASM_Fitter.fitShape(self,img)
+			curShape=ASM_Fitter.getFittingResult(self)
+
+			if curDist<minDist:
+				minDist=curDist
+				bestShape=curShape
+				bestShapeLabel='e'
+		ASM_Fitter.__fittingResult=bestShape
+
+		print "BestShape: ",bestShapeLabel
+		return
+
+	
 		
 if __name__=="__main__":
 	print "ASMModel Running..."
-	# camera='a'
-	# DATAPATH="muct-landmarks-v1\muct-"+camera+"-jpg-v1\jpg"
-	# for root,dirs,fn in os.walk(DATAPATH):
-	# 		cnt=len(fn)
-	# absolutePath=os.getcwd()+"\\"+root+"\\"
-	# ALIGNEDMODELNAME=absolutePath+"muct-"+camera+"-landmarks_aligned_2.model"
-	# MODELNAME=absolutePath+"muct-"+camera+"-landmarks_original.model"
-	# PROFILENAME=absolutePath+"muct-"+camera+"_3.profile"
-	# IMGNAMEVEC=[]
-	# for i in range(751):
-	# 		IMGNAMEVEC.append(absolutePath+fn[i])
-	# # asmBuilder=ASM_ModelBuilder(modelName=MODELNAME,saveFileName=PROFILENAME,imgNameVec=IMGNAMEVEC)
-	# # asmBuilder.setLocalProfileFun(siftCaculator.calcSiftDes)
+	camera='a'
+	camera_b='b'
+	DATAPATH="muct-landmarks-v1\muct-"+camera+"-jpg-v1\jpg"
+	for root,dirs,fn in os.walk(DATAPATH):
+			cnt=len(fn)
+	absolutePath=os.getcwd()+"\\"+root+"\\"
+	ALIGNEDMODELNAME="muct-landmarks-v1\muct-"+camera+"-landmarks_aligned_2.model"
+	MODELNAME="muct-landmarks-v1\muct-"+camera+"-landmarks_original.model"
+	PROFILENAME="muct-landmarks-v1\muct-"+camera+"_sift_trainset_0-450.profile"
+	IMGNAMEVEC=[]
+	for i in range(450):
+			IMGNAMEVEC.append(absolutePath+fn[i])
+	asmBuilder=ASM_ModelBuilder(modelName=MODELNAME,saveFileName=PROFILENAME,imgNameVec=IMGNAMEVEC)
+	asmBuilder.setLocalProfileFun(siftCaculator.calcSiftDes)
 
-	# # asmBuilder.buildModel()
+	asmBuilder.buildModel()
 
-	
-	# asmFitter=ASM_Fitter(PROFILENAME,ALIGNEDMODELNAME,CASCADE_LEFT_EYE,CASCADE_FACE_EYE)
+	#asmFitter=ASM_Fitter(PROFILENAME,ALIGNEDMODELNAME,CASCADE_LEFT_EYE,CASCADE_FACE_EYE)
 	# asmFitter.setLocalProfileFun(siftCaculator.calcSiftDes)
 	# asmFitter.setSearchWindow(10)
 

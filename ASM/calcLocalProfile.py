@@ -11,6 +11,8 @@ import sys
 import os
 from utils import *
 import numpy as np
+from PCA import *
+from hog import *
 IPLIMAGE="<type 'cv2.cv.iplimage'>"
 NARRAY="<type 'numpy.ndarray'>"
 global INFINITE_GRADIENT
@@ -25,10 +27,16 @@ def getAngle(ptA,ptB):
 def calcSiftDes(img,mpoints,auto_orientation=False,angle=0,scale=1.0):
 	points=copy.deepcopy(mpoints)
 	# img=cv2.imread(imgName,cv2.IMREAD_COLOR)
-	
+		
 	(height,width,channel)=img.shape
 	gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
 	cv2.equalizeHist(gray,gray)
+	canny = cv2.Canny(gray, 50, 150)
+	# gray*=0.8
+	canny+=0.5*gray
+	gray=canny
+
 	cnt=len(points)
 	kp=[]
 	for i in range(cnt/2):
@@ -54,7 +62,32 @@ def calcSiftDes(img,mpoints,auto_orientation=False,angle=0,scale=1.0):
 			kp[i].angle=angle
 	sift=cv2.SIFT()
 	kp,des=sift.compute(gray,kp)
+	return des,kp
+def calcHogDes(img,mpoints,auto_orientation=False,angle=0,scale=1.0):
+	points=copy.deepcopy(mpoints)
+	# img=cv2.imread(imgName,cv2.IMREAD_COLOR)
+		
+	(height,width,channel)=img.shape
+	gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
+	cv2.equalizeHist(gray,gray)
+
+	cnt=len(points)
+	kp=[]
+	des=[]
+	for i in range(cnt/2):
+		cx=int(0.5*width+points[2*i]*scale)
+		cy=int(0.5*height-points[2*i+1]*scale)
+		local_img=gray[cy-9:cy+9,cx-9:cx+9]
+		try:
+			local_hog_des=hog(local_img,orientations=9,pixels_per_cell=(6,6),cells_per_block=(3,3))
+		except:
+			print local_img.shape,cx,cy,cx-12,cx+12,cy-12,cy+12
+			raise
+		des.extend(local_hog_des.tolist())
+	des=np.array(des)
+	sz=des.size
+	des.shape=(cnt/2,sz*2/cnt)
 	return des,kp
 
 # def test(imgName,points):
@@ -93,12 +126,12 @@ if __name__=="__main__":
 			cnt=len(fn)
 		absolutePath=os.getcwd()+"\\"+root+"\\"
 		# FILE=absolutePath+fn[cnt-2]
-		FILE=absolutePath+"muct-"+camera+"-landmarks_original.model"
+		FILE="muct-landmarks-v1\muct-"+camera+"-landmarks_original.model"
 		pcaMatrix,meanShape,alignedSet=getDataFromModel(FILE)
 		# print pcaMatrix
 		# print meanShape
 		# print len(alignedSet)
-		DESNAME=absolutePath+"muct-"+camera+"_2.profile"
+		DESNAME="muct-landmarks-v1\muct-"+camera+"_2.profile"
 		fout=open(DESNAME,"w")
 		fout.writelines("LocalProfile caclulated with SIFT descriptor.\n")
 		profileVec=[]
